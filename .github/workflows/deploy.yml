@@ -1,0 +1,79 @@
+name: Deploy API
+on:
+  push:
+    branches:
+      - main
+      - development
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:          
+  development:
+      name: Development Deployment
+      runs-on: ubuntu-latest
+      if: github.ref == 'refs/heads/development'
+      environment: 
+        name: development
+        url: https://devapi.honest.properties
+      steps:
+      - name: Checkout
+        uses: actions/checkout@v3  
+      - name: Setup Node
+        uses: actions/setup-node@v3
+        with:
+          node-version: "18.x"
+          cache: 'npm'       
+      - name: Install Dependencies
+        run: npm install       
+      - name: Nodejs app Deploy
+        uses: easingthemes/ssh-deploy@main
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          REMOTE_HOST: ${{ secrets.SSH_HOST }}
+          REMOTE_USER: ${{ secrets.USERNAME }}
+          TARGET: dev/api
+          SCRIPT_BEFORE: |
+            rm -rf dev/api
+          SCRIPT_AFTER: |
+            ls -al
+            echo $RSYNC_STDOUT
+            pm2 restart app
+
+  production:
+      name: Production Deployment
+      runs-on: ubuntu-latest
+      if: github.ref == 'refs/heads/main'
+      environment: 
+        name: production
+        url: https://api.honest.properties
+      steps:
+      - name: Checkout
+        uses: actions/checkout@v3  
+      - name: Setup Node
+        uses: actions/setup-node@v3
+        with:
+          node-version: "18.x"
+          cache: 'npm'       
+      - name: Install Dependencies
+        run: npm install       
+      - name: Production env
+        run: |
+          sed -i 's/production-database-password-secret/${{ secrets.PRODUCTION_DB_PASSWORD }}/' .env.prod
+          mv .env.prod .env
+      - name: Nodejs app Deploy
+        uses: easingthemes/ssh-deploy@main
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          REMOTE_HOST: ${{ secrets.SSH_HOST }}
+          REMOTE_USER: ${{ secrets.USERNAME }}
+          TARGET: dev/api
+          SCRIPT_BEFORE: |
+            rm -rf dev/api
+          SCRIPT_AFTER: |
+            .env.prod .env
+            ls -al
+            echo $RSYNC_STDOUT
+            pm2 restart app
